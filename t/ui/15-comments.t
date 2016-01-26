@@ -31,7 +31,7 @@ my $t = Test::Mojo->new('OpenQA::WebAPI');
 
 my $driver = t::ui::PhantomTest::call_phantom();
 if ($driver) {
-    plan tests => 27;
+    plan tests => 34;
 }
 else {
     plan skip_all => 'Install phantomjs to run these tests';
@@ -107,9 +107,18 @@ $driver->find_element('#submitComment', 'css')->click();
 
 is($driver->find_element('blockquote.ui-state-highlight', 'css')->get_text(), "Comment added", "comment added highlight");
 
-# go back to test result overview and check comment availability sign
+# go back to test result overview and check comment availability sign when
+# selected by query parameter
 $driver->find_element('Build0048@opensuse', 'link_text')->click();
 is($driver->get_title(), "openQA: Test summary", "back on test group overview");
+my $get = $t->get_ok($driver->get_current_url)->status_is(200);
+$get->element_exists_not('#res_DVD_x86_64_doc .fa-comment');
+my $url = $driver->get_current_url . "&show_comment=1";
+$get = $t->get_ok($url)->status_is(200);
+$get->element_exists('#res_DVD_x86_64_doc .fa-comment');
+$driver->get($url);
+is($driver->find_element('#res_DVD_x86_64_doc .fa-comment', 'css')->get_attribute('title'), 'Comment available', "test results show available comment(s)");
+
 t::ui::PhantomTest::kill_phantom();
 
 done_testing();
