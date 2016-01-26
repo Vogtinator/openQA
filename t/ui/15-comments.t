@@ -117,7 +117,7 @@ my $url = $driver->get_current_url . "&show_comment=1";
 $get = $t->get_ok($url)->status_is(200);
 $get->element_exists('#res_DVD_x86_64_doc .fa-comment');
 $driver->get($url);
-is($driver->find_element('#res_DVD_x86_64_doc .fa-comment', 'css')->get_attribute('title'), 'Comment available', "test results show available comment(s)");
+is($driver->find_element('#res_DVD_x86_64_doc .fa-comment', 'css')->get_attribute('title'), '1 comment available', "test results show available comment(s)");
 
 t::ui::PhantomTest::kill_phantom();
 

@@ -378,7 +378,7 @@ sub overview {
                 jobid    => $job->id,
                 state    => "done",
                 failures => $job->failed_modules_with_needles(),
-                comments => $search_args{show_comment} ? scalar $job->comments > 0 : 0,
+                comments => $search_args{show_comment} ? scalar $job->comments : 0,
             };
             $aggregated->{$overall}++;
         }
