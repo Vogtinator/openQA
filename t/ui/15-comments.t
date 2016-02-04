@@ -31,7 +31,7 @@ my $t = Test::Mojo->new('OpenQA::WebAPI');
 
 my $driver = t::ui::PhantomTest::call_phantom();
 if ($driver) {
-    plan tests => 24;
+    plan tests => 34;
 }
 else {
     plan skip_all => 'Install phantomjs to run these tests';
@@ -44,7 +44,7 @@ else {
 
 is($driver->get_title(), "openQA", "on main page");
 $driver->find_element('Login', 'link_text')->click();
-# we're back on the main page
+# we are back on the main page
 is($driver->get_title(), "openQA", "back on main page");
 
 $driver->find_element('opensuse', 'link_text')->click();
@@ -96,6 +96,28 @@ is((shift @urls2)->get_attribute('href'), 'https://bugzilla.opensuse.org/show_bu
 is((shift @urls2)->get_attribute('href'), 'https://progress.opensuse.org/issues/3456',          "url7-href");
 like((shift @urls2)->get_attribute('href'), qr{/tests/4567}, "url8-href");
 like((shift @urls2)->get_attribute('href'), qr{/tests/5678/modules/welcome/steps}, "url9-href");
+
+# check commenting in test results
+$driver->find_element('Build0048', 'link_text')->click();
+$driver->find_element('.status',   'css')->click();
+is($driver->get_title(), "openQA: opensuse-Factory-DVD-x86_64-Build0048-doc test results", "on test result page");
+$driver->find_element('Comments (0)',   'link_text')->click();
+$driver->find_element('textarea',       'css')->send_keys('Comments also work within test results');
+$driver->find_element('#submitComment', 'css')->click();
+
+is($driver->find_element('blockquote.ui-state-highlight', 'css')->get_text(), "Comment added", "comment added highlight");
+
+# go back to test result overview and check comment availability sign when
+# selected by query parameter
+$driver->find_element('Build0048@opensuse', 'link_text')->click();
+is($driver->get_title(), "openQA: Test summary", "back on test group overview");
+my $get = $t->get_ok($driver->get_current_url)->status_is(200);
+$get->element_exists_not('#res_DVD_x86_64_doc .fa-comment');
+my $url = $driver->get_current_url . "&show_comment=1";
+$get = $t->get_ok($url)->status_is(200);
+$get->element_exists('#res_DVD_x86_64_doc .fa-comment');
+$driver->get($url);
+is($driver->find_element('#res_DVD_x86_64_doc .fa-comment', 'css')->get_attribute('title'), '1 comment available', "test results show available comment(s)");
 
 t::ui::PhantomTest::kill_phantom();
 

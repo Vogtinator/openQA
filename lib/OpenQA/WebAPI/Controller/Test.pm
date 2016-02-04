@@ -292,6 +292,7 @@ sub _caclulate_preferred_machines {
     my %machines;
     while (my $job = $jobs->next()) {
         my $sh = $job->settings_hash;
+        next unless $sh->{MACHINE};
         $machines{$sh->{ARCH}} ||= {};
         $machines{$sh->{ARCH}}->{$sh->{MACHINE}}++;
     }
@@ -314,49 +315,41 @@ sub _caclulate_preferred_machines {
 sub overview {
     my $self       = shift;
     my $validation = $self->validation;
-    $validation->required('distri');
-    $validation->required('version');
+    for my $arg (qw/distri version/) {
+        $validation->required($arg);
+    }
     if ($validation->has_error) {
         return $self->render(text => 'Missing parameters', status => 404);
     }
 
     my %search_args;
     my $group;
-    my $distri  = $self->param('distri');
-    my $version = $self->param('version');
-    $search_args{distri}  = $distri;
-    $search_args{version} = $version;
-
-    if ($self->param('groupid')) {
-        $group = $self->db->resultset("JobGroups")->find($self->param('groupid'));
-        return $self->reply->not_found if (!$group);
-        $search_args{groupid} = $group->id;
+    for my $arg (qw/distri version flavor build/) {
+        next unless defined $self->param($arg);
+        $search_args{$arg} = $self->param($arg);
     }
-    elsif ($self->param('group')) {
-        $group = $self->db->resultset("JobGroups")->find({name => $self->param('group')});
+
+    if ($self->param('groupid') or $self->param('group')) {
+        my $search_term = $self->param('groupid') ? $self->param('groupid') : {name => $self->param('group')};
+        $group = $self->db->resultset("JobGroups")->find($search_term);
         return $self->reply->not_found if (!$group);
         $search_args{groupid} = $group->id;
     }
 
-    my $flavor = $self->param('flavor');
-    if ($flavor) {
-        $search_args{flavor} = $flavor;
+    if (!$search_args{build}) {
+        $search_args{build} = $self->db->resultset("Jobs")->latest_build(%search_args);
     }
-
-    my $build = $self->param('build');
-    if (!$build) {
-        $build = $self->db->resultset("Jobs")->latest_build(%search_args);
-    }
-
-    $search_args{build}       = $build;
-    $search_args{fulldetails} = 1;
-    $search_args{scope}       = 'current';
+    $search_args{scope} = 'current';
 
     my @configs;
     my %archs;
     my %results;
     my $aggregated = {none => 0, passed => 0, failed => 0, incomplete => 0, scheduled => 0, running => 0, unknown => 0};
 
+    # Forward all query parameters to query_jobs to allow specifying additional
+    # query parameters which are then properly shown on the overview.
+    my $req_params = $self->req->params->to_hash;
+    %search_args = (%search_args, %$req_params);
     my $jobs = query_jobs(%search_args);
 
     my $all_result_stats   = OpenQA::Schema::Result::JobModules::job_module_stats($jobs);
@@ -385,6 +378,7 @@ sub overview {
                 jobid    => $job->id,
                 state    => "done",
                 failures => $job->failed_modules_with_needles(),
+                comments => $search_args{show_comment} ? scalar $job->comments : 0,
             };
             $aggregated->{$overall}++;
         }
@@ -410,7 +404,7 @@ sub overview {
         }
 
         # Populate @configs and %archs
-        if ($preferred_machines->{$settings->{ARCH}} ne $settings->{MACHINE}) {
+        if ($settings->{MACHINE} && $preferred_machines->{$settings->{ARCH}} && $preferred_machines->{$settings->{ARCH}} ne $settings->{MACHINE}) {
             $test .= "@" . $settings->{MACHINE};
         }
         push(@configs, $test) unless (grep { $test eq $_ } @configs);
@@ -433,9 +427,9 @@ sub overview {
     }
 
     $self->stash(
-        build      => $build,
-        version    => $version,
-        distri     => $distri,
+        build      => $search_args{build},
+        version    => $search_args{version},
+        distri     => $search_args{distri},
         group      => $group,
         configs    => \@configs,
         types      => \@types,
